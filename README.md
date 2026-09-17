@@ -15,8 +15,6 @@ $$\textbf{Customer Enquiry} \longrightarrow \textbf{Quotation} \longrightarrow \
 6. [Docker Single-Command Deployment](#-docker-single-command-deployment)
 7. [Database Schema & ER Diagram](#-database-schema--er-diagram)
 8. [REST API Documentation](#-rest-api-documentation)
-9. [5-Minute Demo Video Script](#-5-minute-demo-video-script)
-10. [Live Verification Round Defense Guide](#-live-verification-round-defense-guide)
 
 ---
 
@@ -196,62 +194,3 @@ erDiagram
 | `/api/sales-orders` | GET | Authenticated | Lists sales orders |
 | `/api/sales-orders/:id/confirm` | POST | **ADMIN ONLY** | Acquires row locks, validates stock, reserves inventory |
 | `/api/sales-orders/:id/dispatch`| POST | **ADMIN ONLY** | Decrements physical & reserved stock, creates dispatch |
-
----
-
-## 🎥 5-Minute Demo Video Script
-
-* **0:00 - 0:40 | Overview & Login:**
-  - Introduce PERN architecture and show live Inventory Bar.
-  - Log in as Sales User (`sales@erp.com`).
-* **0:40 - 1:40 | Customer Enquiry (Screen 2):**
-  - Create new customer enquiry for "Apex Heavy Machinery Ltd.".
-  - Add 2 products: 10 Valves, 5 Pumps. Submit and show status badge `NEW`.
-* **1:40 - 2:40 | Quotation & Pricing Engine (Screen 3):**
-  - Generate quotation against enquiry.
-  - Apply 10% discount and 18% GST. Explain backend pricing validation.
-  - Mark as `SENT`, then click `[Accept]`. Click `[Convert to Sales Order]`.
-* **2:40 - 3:50 | Stock Reservation & Concurrency (Screen 4):**
-  - Switch to Admin user (`admin@erp.com`).
-  - Highlight current Inventory Bar: Gate Valve Available = 140.
-  - Click `[Confirm & Reserve Stock]`.
-  - Show Inventory Bar updating live: Reserved increases, Available drops, Physical is unchanged!
-  - Explain concurrency defense (`SELECT ... FOR UPDATE` and CHECK constraints).
-* **3:50 - 4:40 | Dispatch Processing:**
-  - Click `[Process Dispatch]`. Enter Vehicle `MH-12-AB-9876` and Driver `Ramesh Patil`.
-  - Submit dispatch. Show status changed to `DISPATCHED`.
-  - Show Inventory Bar update: Physical drops, Reserved releases, Available is preserved.
-* **4:40 - 5:00 | Automated Tests Summary:**
-  - Switch to terminal, run `npm test`. Show 6 passing tests including the concurrency race condition test.
-
----
-
-## 🛡️ Live Verification Round Defense Guide
-
-Candidates will receive an unannounced live modification (20–30 min). Here are the solutions ready to implement:
-
-### Scenario A: Adding "DAMAGED" Stock
-$$\text{Available} = \text{Physical} - \text{Reserved} - \text{Damaged}$$
-```sql
-ALTER TABLE inventory ADD COLUMN damaged_quantity INT NOT NULL DEFAULT 0 CHECK (damaged_quantity >= 0);
-ALTER TABLE inventory DROP CONSTRAINT check_reservation_limit;
-ALTER TABLE inventory ADD CONSTRAINT check_inventory_balance CHECK (physical_quantity >= (reserved_quantity + damaged_quantity));
-```
-In `order.service.ts`:
-```typescript
-const available_quantity = physical_quantity - reserved_quantity - (damaged_quantity || 0);
-```
-
-### Scenario B: Cancelling Confirmed Sales Order
-Release reserved stock when order is cancelled:
-```typescript
-if (order.status === 'CONFIRMED') {
-  for (const item of order.items) {
-    await client.query(
-      `UPDATE inventory SET reserved_quantity = GREATEST(0, reserved_quantity - $1) WHERE product_id = $2`,
-      [item.quantity, item.product_id]
-    );
-  }
-  await client.query(`UPDATE sales_orders SET status = 'CANCELLED' WHERE id = $1`, [orderId]);
-}
-```
